@@ -1,0 +1,7 @@
+# PC-side tools (not the board). Install: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+mpremote                 # talk to the board: copy files, REPL, reset
+mpy-cross==1.25.0.post2  # compile to .mpy; must match the board's MicroPython 1.25.x
+esptool                  # flash MicroPython itself (only for a new or wiped board)
+pytest                   # tests/: the pure-Python firmware modules on the PC
+pyflakes                 # lint
+bleak                    # tools/scan.py: see the broadcasts from the PC

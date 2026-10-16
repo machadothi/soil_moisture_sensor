@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+# Compiled .mpy files (tools/deploy.sh)
+build/
+# Per-board settings (calibration); config.example.json documents it
+firmware/config.json
