@@ -6,3 +6,5 @@ __pycache__/
 build/
 # Per-board settings (calibration); config.example.json documents it
 firmware/config.json
+# Local project notes and TODOs for Claude Code
+.claude/
