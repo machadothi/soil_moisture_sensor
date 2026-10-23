@@ -60,7 +60,8 @@ the radio stays off, and a BOOT press only gets 2 s of fast flashing, so you
 can tell the board isn't broken, just empty. While the battery is fine the LED
 stays off to save power.
 
-The LED pin is `pins.led` in the configuration (README.md).
+It's the board's blue LED on GPIO16 (`pins.led`; `led_active_low` if the flashes look
+inverted, see README.md).
 
 ## Home Assistant and the app
 

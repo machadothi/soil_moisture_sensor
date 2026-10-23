@@ -153,9 +153,9 @@ class Ble:
             if time.ticks_diff(now, self.identify_until) >= 0:
                 self.identify_until = None
                 if led:
-                    led.off()
+                    led.set(False)
             elif led:
-                led.value(now // 100 % 2)
+                led.set(now // 100 % 2)
 
     def stop(self):
         if self._bonds_dirty:

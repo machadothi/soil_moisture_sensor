@@ -45,7 +45,10 @@ _CUTOFF_SHOW_MS = 2000  # the LED shows "cutoff" this long after a button press
 
 DEFAULTS = {
     # button: wakes the board from deep sleep (GPIO0 is the BOOT button).
-    "pins": {"soil": 32, "dht11": 22, "battery": 34, "led": None, "button": 0},
+    # led: the board's blue LED (battery warnings, identify).
+    "pins": {"soil": 32, "dht11": 22, "battery": 34, "led": 16, "button": 0},
+    # True if the LED lights with its pin low.
+    "led_active_low": False,
     # Probe output in air and in water (mV). Measure yours: README.md, "Calibration".
     "soil": {"dry_mv": 2830, "wet_mv": 1300},
     # Battery through a divider, if the board has one. Readings outside
@@ -91,6 +94,17 @@ def load_config():
 # RTC memory survives deep sleep: the BTHome packet id, so every measurement
 # gets a new one and Home Assistant never drops a reading, and the previous
 # battery level, for the hysteresis (0xFF = none).
+class Led:
+    """On/off whichever way the LED is wired."""
+
+    def __init__(self, pin, active_low):
+        self.active_low = active_low
+        self.pin = Pin(pin, Pin.OUT, value=1 if active_low else 0)
+
+    def set(self, on):
+        self.pin.value(1 if bool(on) != self.active_low else 0)
+
+
 def _rtc_state():
     memory = machine.RTC().memory()
     return tuple(memory) if len(memory) == 2 else (0, 0xFF)
@@ -105,7 +119,7 @@ class App:
         self.cfg = load_config()
         self.started = time.ticks_ms()
         led_pin = self.cfg["pins"]["led"]
-        self.led = Pin(led_pin, Pin.OUT, value=0) if led_pin is not None else None
+        self.led = Led(led_pin, self.cfg["led_active_low"]) if led_pin is not None else None
         self.sensors = sensors.Sensors(self.cfg)
         self.readings = sensors.Readings()
         self.reboot_at = None
@@ -269,7 +283,7 @@ class App:
         period = power.blink_ms(self.level)
         if self.led is None or not period or (self.ble and self.ble.identify_until is not None):
             return
-        self.led.value(1 if time.ticks_diff(now, self.started) % period < _FLASH_MS else 0)
+        self.led.set(time.ticks_diff(now, self.started) % period < _FLASH_MS)
 
     def blink_for(self, ms):
         end = time.ticks_add(time.ticks_ms(), ms)
@@ -282,7 +296,7 @@ class App:
         if self.ble:
             self.ble.stop()
         if self.led:
-            self.led.off()
+            self.led.set(False)
         button = cfg["pins"]["button"]
         if button is not None:
             esp32.wake_on_ext0(pin=Pin(button, Pin.IN), level=esp32.WAKEUP_ALL_LOW)

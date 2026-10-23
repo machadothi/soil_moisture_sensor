@@ -1,5 +1,6 @@
 {
-    "pins": {"soil": 32, "dht11": 22, "battery": 34, "led": null, "button": 0},
+    "pins": {"soil": 32, "dht11": 22, "battery": 34, "led": 16, "button": 0},
+    "led_active_low": false,
     "soil": {"dry_mv": 2830, "wet_mv": 1300},
     "battery": {"divider": 2.0, "min_v": 2.8, "max_v": 4.5},
     "bluetooth": {"name": "", "passkey": ""},

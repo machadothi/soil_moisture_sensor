@@ -19,7 +19,7 @@ Sensor Detection Module 18650 Battery Shield", silkscreen **DIY MORE**.
 | 22 | DHT11 data | measured: answers as a DHT11 |
 | 34 | battery divider, **added by hand** | the [Tasmota template](https://templates.blakadder.com/diymore_012592.html) lists a second ADC here, but out of the box it reads 0 V (see below) |
 | 0 | BOOT button | wakes the board from deep sleep (ext0, active low); tested |
-| 16, 33 | LEDs | Tasmota template; not checked yet |
+| 16 | blue LED | tested (2026-10-23): the only LED a pin controls. The Tasmota template also lists 33; nothing there, nor on 2, 4, 5, 12–15, 17–19, 21, 23, 25–27. The board's other LED (power/charging) is wired to the hardware |
 
 ## Board check (2026-10-16)
 

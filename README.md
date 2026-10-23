@@ -119,7 +119,8 @@ per-board calibration, so it is git-ignored.
 | `pins.soil` | 32 | probe output (ADC) |
 | `pins.dht11` | 22 | DHT11 data |
 | `pins.battery` | 34 | battery divider (ADC); `null` = none |
-| `pins.led` | `null` | an LED: battery warnings and the app's identify command |
+| `pins.led` | 16 | the blue LED: battery warnings and the app's identify command; `null` = none |
+| `led_active_low` | false | true if the LED lights with its pin low (flashes look inverted) |
 | `pins.button` | 0 | wakes the board from deep sleep (GPIO0 = BOOT); `null` = none |
 | `soil.dry_mv`, `soil.wet_mv` | 2830, 1300 | calibration, see above |
 | `battery.divider` | 2.0 | battery voltage / pin voltage |
