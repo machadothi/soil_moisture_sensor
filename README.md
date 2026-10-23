@@ -29,9 +29,10 @@ app connects (up to 5 minutes), and sleeps again when the app disconnects.
 - **Easy to work with over USB.** After power-on, the reset (EN) button or a
   deploy, it also stays awake for up to 5 minutes and measures every 5 s, so
   you can watch the log, calibrate and reach the REPL.
-- **Battery level,** if the board has a battery divider. On the board tested
-  so far it doesn't (see [docs/hardware.md](docs/hardware.md)). Readings from
-  an unconnected pin are dropped rather than sent.
+- **Battery level,** only with a battery divider. The board has none out of the
+  box; two resistors and a capacitor on GPIO34 add one (see
+  [docs/hardware.md](docs/hardware.md#battery-sensing)). Without it, readings
+  from the unconnected pin are dropped rather than sent.
 
 ## Quick start
 

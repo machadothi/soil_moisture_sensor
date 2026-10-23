@@ -17,7 +17,8 @@ Sensor Detection Module 18650 Battery Shield", silkscreen **DIY MORE**.
 |---|---|---|
 | 32 | soil probe output (ADC1) | measured: ~2.3–2.9 V in air, follows the probe |
 | 22 | DHT11 data | measured: answers as a DHT11 |
-| 34 | battery divider? (ADC1) | [Tasmota template](https://templates.blakadder.com/diymore_012592.html) lists a second ADC here; on the tested board it floats (see below) |
+| 34 | battery divider, **added by hand** | the [Tasmota template](https://templates.blakadder.com/diymore_012592.html) lists a second ADC here, but out of the box it reads 0 V (see below) |
+| 0 | BOOT button | wakes the board from deep sleep (ext0, active low); tested |
 | 16, 33 | LEDs | Tasmota template; not checked yet |
 
 ## Board check (2026-10-16)
@@ -30,7 +31,29 @@ Sensor Detection Module 18650 Battery Shield", silkscreen **DIY MORE**.
 | DHT11 | 22–23 °C, 55–61 %RH. The first read after a long pause can be stale |
 | Soil probe | 2.3–2.9 V in air. The value moved between sessions and drifted up within one session; not settled yet |
 | Bluetooth vs. ADC | no effect: the probe reads the same with the radio on or off |
-| Battery voltage | **not found**: GPIO34 reads 0.14–0.21 V and falls while sampled (a floating pin). No other ADC pin carries a battery voltage either. The firmware drops readings outside 2.8–4.5 V, so nothing wrong is sent |
+| Battery voltage | **not wired to any pin** out of the box; a divider was added, see below |
+
+## Battery sensing
+
+Out of the box the board has no battery measurement (checked 2026-10-22). With a charged ~4 V battery, all 14
+analog-capable pins (ADC1: 33–36, 39; ADC2: 2, 4, 12–15, 25–27) were read:
+- with USB, over the cable;
+- on battery alone, over the air (a temporary diagnostic packet), so USB
+  couldn't hide it.
+
+GPIO34, 35, 36 and 39 sit at 0 V (the ADC's 128–142 mV floor) either way; the
+others float. A divider would show a steady ~2 V. The board does run on the
+battery: it woke on its timer and on the BOOT button with the cable out.
+
+To add one: two 100 kΩ resistors in series from BAT+ to GND, the middle point
+to GPIO34, and 100 nF from GPIO34 to GND. The firmware already expects that
+(`pins.battery` 34, `battery.divider` 2.0). It draws about 20 µA all the time.
+Without it, the firmware sends no battery value (it drops anything outside
+2.8–4.5 V).
+
+**Added on this board (2026-10-23):** 2 × 100 kΩ and 100 nF as above. It reads
+3.91–3.98 V while charging over USB (~1.96 V at GPIO34), and the battery %
+and voltage go out over BTHome and to the app.
 
 ## Flashing MicroPython
 
