@@ -75,7 +75,8 @@ connected) and notified to a subscribed phone.
 | 12 | u16 | deep sleep between measurements, s (0 = never sleeps) |
 | 14 | u16 | battery, mV (0 = not measured) |
 | 16 | u8 | battery, % (`0xFF` = not measured) |
-| 17 | 3 bytes | reserved |
+| 17 | u8 | battery protection level: 0 normal, 1 saving, 2 low, 3 very low, 4 critical, 5 cutoff; `0xFF` = no battery reading ([battery.md](battery.md)) |
+| 18 | 2 bytes | reserved |
 
 **Soil** (write):
 

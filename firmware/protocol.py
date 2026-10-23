@@ -67,18 +67,21 @@ def env(uptime_ms, temperature, humidity):
     return struct.pack("<IHhHIHiBhHh", uptime_ms & 0xFFFFFFFF, valid, t, h, 0, 0, 0, 0, 0, 0, 0)
 
 
-def soil(uptime_ms, soil_mv, moisture, dry_mv, wet_mv, interval_s, battery_v, battery_pct):
+def soil(uptime_ms, soil_mv, moisture, dry_mv, wet_mv, interval_s, battery_v, battery_pct, power_level=None):
     """Soil, 20 bytes:
     u32 uptime ms, u16 probe mV (0 = none), u16 moisture % x 100 (0xFFFF = none),
-    u16 dry mV, u16 wet mV, u16 deep sleep between measurements s (0 = never),
-    u16 battery mV (0 = none), u8 battery % (0xFF = none), 3 bytes reserved."""
+    u16 dry mV, u16 wet mV, u16 configured deep sleep between measurements s
+    (0 = never), u16 battery mV (0 = none), u8 battery % (0xFF = none),
+    u8 battery protection level (power.py: 0 normal ... 5 cutoff, 0xFF = no
+    battery reading), 2 bytes reserved."""
     return struct.pack(
-        "<IHHHHHHB3s", uptime_ms & 0xFFFFFFFF,
+        "<IHHHHHHBB2s", uptime_ms & 0xFFFFFFFF,
         0 if soil_mv is None else round(soil_mv),
         _NONE_U16 if moisture is None else round(moisture * 100),
         dry_mv, wet_mv, interval_s,
         0 if battery_v is None else round(battery_v * 1000),
-        0xFF if battery_pct is None else battery_pct, b"\0\0\0")
+        0xFF if battery_pct is None else battery_pct,
+        0xFF if power_level is None else power_level, b"\0\0")
 
 
 def system(uptime_s, free_ram, chip_c, bluetooth, cpu_mhz, reset_cause, micropython, sensor_errors):

@@ -21,6 +21,9 @@ TEMPERATURE = 0x02    # s16, 0.01 °C
 HUMIDITY = 0x03       # u16, 0.01 %
 VOLTAGE = 0x0C        # u16, 0.001 V
 MOISTURE = 0x14       # u16, 0.01 %
+BATTERY_LOW = 0x15    # binary: 1 = low
+HEAT = 0x1D           # binary: 1 = hot
+PROBLEM = 0x26        # binary: 1 = problem
 
 _FORMATS = {
     PACKET_ID: ("<B", 1),
@@ -29,6 +32,9 @@ _FORMATS = {
     HUMIDITY: ("<H", 100),
     VOLTAGE: ("<H", 1000),
     MOISTURE: ("<H", 100),
+    BATTERY_LOW: ("<B", 1),
+    HEAT: ("<B", 1),
+    PROBLEM: ("<B", 1),
 }
 
 

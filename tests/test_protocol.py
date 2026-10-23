@@ -28,9 +28,10 @@ def test_soil_layout():
     value = protocol.soil(5000, 2302, 34.51, 2830, 1300, 300, None, None)
     assert len(value) == protocol.SOIL_SIZE
     assert struct.unpack("<IHHHHHHB", value[:17]) == (5000, 2302, 3451, 2830, 1300, 300, 0, 0xFF)
-    missing = protocol.soil(0, None, None, 2830, 1300, 0, 3.9, 72)
+    assert value[17] == 0xFF   # no battery reading: no protection level
+    missing = protocol.soil(0, None, None, 2830, 1300, 0, 3.9, 72, power_level=2)
     assert struct.unpack("<HH", missing[4:8]) == (0, 0xFFFF)
-    assert struct.unpack("<HB", missing[14:17]) == (3900, 72)
+    assert struct.unpack("<HBB", missing[14:18]) == (3900, 72, 2)
 
 
 def test_system_layout():

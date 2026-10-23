@@ -15,9 +15,9 @@ PORT="${PORT:-/dev/ttyUSB0}"
 BIN="${VENV:-$ROOT/.venv}/bin"
 MPREMOTE="$BIN/mpremote"
 MPY_CROSS="$BIN/mpy-cross"
-MODULES=(app ble bthome convert protocol sensors)
+MODULES=(app ble bthome convert power protocol sensors)
 # Sources would be imported instead of the .mpy files.
-STALE=(app.py ble.py bthome.py convert.py protocol.py sensors.py)
+STALE=(app.py ble.py bthome.py convert.py power.py protocol.py sensors.py)
 
 [ -x "$MPREMOTE" ] && [ -x "$MPY_CROSS" ] || { echo "Missing mpremote/mpy-cross in $BIN, see the top of $0"; exit 1; }
 

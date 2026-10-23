@@ -11,6 +11,11 @@
 # _DISCONNECT_GRACE_MS after it disconnects it sleeps again. "interval_s": 0
 # never sleeps (USB power).
 #
+# Battery protection (power.py, docs/battery.md) has the last word: the
+# battery is read first, before the radio starts, and its level stretches the
+# sleep, shortens or refuses the wait for the app, turns the radio off near
+# empty, and blinks the LED faster as the battery runs down.
+#
 # Settings changed from the app (name, calibration, interval) go to
 # settings.json, on top of config.json; a factory reset deletes it.
 import gc
@@ -25,6 +30,7 @@ import machine
 from machine import Pin
 
 import bthome
+import power
 import protocol
 import sensors
 from ble import BONDS_FILE, Ble
@@ -34,6 +40,8 @@ _CONNECTED_MEASURE_MS = 2000
 # Short, so the app can reconnect (e.g. Android re-connecting after pairing).
 _DISCONNECT_GRACE_MS = 5000
 _EXT0_WAKE = getattr(machine, "EXT0_WAKE", 2)
+_FLASH_MS = 30          # one LED flash
+_CUTOFF_SHOW_MS = 2000  # the LED shows "cutoff" this long after a button press
 
 DEFAULTS = {
     # button: wakes the board from deep sleep (GPIO0 is the BOOT button).
@@ -80,14 +88,16 @@ def load_config():
     return cfg
 
 
-# The BTHome packet id survives deep sleep in RTC memory, so every
-# measurement gets a new one and Home Assistant never drops a reading.
-def _next_packet_id():
-    rtc = machine.RTC()
-    memory = rtc.memory()
-    packet_id = ((memory[0] if len(memory) == 1 else 0) + 1) & 0xFF
-    rtc.memory(struct.pack("B", packet_id))
-    return packet_id
+# RTC memory survives deep sleep: the BTHome packet id, so every measurement
+# gets a new one and Home Assistant never drops a reading, and the previous
+# battery level, for the hysteresis (0xFF = none).
+def _rtc_state():
+    memory = machine.RTC().memory()
+    return tuple(memory) if len(memory) == 2 else (0, 0xFF)
+
+
+def _save_rtc_state(packet_id, level):
+    machine.RTC().memory(struct.pack("BB", packet_id, 0xFF if level is None else level))
 
 
 class App:
@@ -98,28 +108,49 @@ class App:
         self.led = Pin(led_pin, Pin.OUT, value=0) if led_pin is not None else None
         self.sensors = sensors.Sensors(self.cfg)
         self.readings = sensors.Readings()
-        self.packet_id = 0
         self.reboot_at = None
+        self.end_session = False
         self.timer_wake = (machine.reset_cause() == machine.DEEPSLEEP_RESET
                            and machine.wake_reason() != _EXT0_WAKE)
-        self.ble = Ble(self)
+        # The battery first, with the radio still off: its resting voltage.
+        self.packet_id, previous = _rtc_state()
+        self.rest_v = self.sensors.battery_v()
+        self.level = power.level(self.rest_v, None if previous == 0xFF else previous)
+        _save_rtc_state(self.packet_id, self.level if self.rest_v is not None else None)
+        if self.rest_v is not None and (self.level != previous or not self.timer_wake):
+            print("Battery: %.2f V at rest, %s" % (self.rest_v, power.NAMES[self.level]))
+        self.ble = Ble(self) if power.radio(self.level) else None
 
     # --- readings -------------------------------------------------------------------
 
     def measure(self):
-        self.readings = self.sensors.read()
-        self.packet_id = _next_packet_id()
-        print(self.readings)
+        r = self.readings = self.sensors.read()
+        self.packet_id = (self.packet_id + 1) & 0xFF
+        _save_rtc_state(self.packet_id, self.level if self.rest_v is not None else None)
+        print(r)
+        if r.temperature is not None and r.temperature >= power.HOT_C:
+            print("Battery: %d C next to the cell: too hot to charge a Li-ion cell safely" % r.temperature)
+        if r.battery_v is not None and r.battery_v > power.OVERVOLTAGE_V:
+            print("Battery: %.2f V is above a full cell: check the charger" % r.battery_v)
+        # Over-discharge during a long app session: the voltage under load.
+        if (self.ble.connection is not None and r.battery_v is not None
+                and r.battery_v < power.SESSION_CUTOFF_V and not self.end_session):
+            print("Battery: %.2f V under load, ending the session" % r.battery_v)
+            self.end_session = True
+            self.level = max(self.level, power.CRITICAL)   # sleep long; the next wake re-measures
+            _save_rtc_state(self.packet_id, self.level)
         self.publish()
 
     def publish(self):
         """The current readings and settings to GATT and the BTHome packet."""
         r, soil = self.readings, self.cfg["soil"]
+        known = self.rest_v is not None
         uptime = time.ticks_diff(time.ticks_ms(), self.started)
         self.ble.update({
             "env": protocol.env(uptime, r.temperature, r.humidity),
             "soil": protocol.soil(uptime, r.soil_mv, r.moisture, soil["dry_mv"], soil["wet_mv"],
-                                  self.cfg["interval_s"], r.battery_v, r.battery),
+                                  self.cfg["interval_s"], r.battery_v, r.battery,
+                                  self.level if known else None),
             "system": protocol.system(uptime // 1000, gc.mem_free(), (esp32.raw_temperature() - 32) / 1.8,
                                       self.ble.connection is not None, machine.freq() // 1000000,
                                       machine.reset_cause(), sys.implementation.version[:3],
@@ -131,6 +162,9 @@ class App:
                 bthome.HUMIDITY: r.humidity,
                 bthome.VOLTAGE: r.battery_v,
                 bthome.MOISTURE: r.moisture,
+                bthome.BATTERY_LOW: (self.level >= power.LOW) if known else None,
+                bthome.HEAT: None if r.temperature is None else r.temperature >= power.HOT_C,
+                bthome.PROBLEM: None if r.battery_v is None else r.battery_v > power.OVERVOLTAGE_V,
             },
         })
 
@@ -181,17 +215,25 @@ class App:
 
     def run(self):
         cfg = self.cfg
-        timer_wake = self.timer_wake
-        self.ble.app_visible = not timer_wake
-        if not timer_wake:
+        if self.ble is None:   # cutoff: no radio at all, sleep long
+            print("Battery: cutoff, sleeping %d h without radio; charge it" % (power.CUTOFF_INTERVAL_S // 3600))
+            if not self.timer_wake:   # pressed BOOT or reset: show why nothing happens
+                self.blink_for(_CUTOFF_SHOW_MS)
+            self.sleep()
+        app_s = None if self.timer_wake else power.awake_s(self.level, cfg["awake_s"])
+        self.ble.app_visible = app_s is not None
+        if app_s is not None:
             print("Soil sensor: %s (%s), BLE Sensor app and BTHome" % (self.ble.name, self.ble.address))
             print("Bluetooth: pairing code %06d" % self.ble.passkey)
-            if cfg["interval_s"]:
-                print("Waiting %s for the app, then measuring every %d s in deep sleep. "
-                      "BOOT wakes it. Ctrl+C for the REPL."
-                      % ("%d s" % cfg["awake_s"] if cfg["awake_s"] else "until it connects", cfg["interval_s"]))
+            print("Waiting %s for the app, then measuring every %d s in deep sleep. BOOT wakes it. "
+                  "Ctrl+C for the REPL." % ("%d s" % app_s if app_s else "until it connects",
+                                            power.interval_s(self.level, cfg["interval_s"])))
+            window_s = app_s
+        elif not self.timer_wake:   # pressed BOOT, but the battery is too low for the app
+            window_s = _CUTOFF_SHOW_MS // 1000
+        else:
+            window_s = power.CRITICAL_ADVERTISE_S if self.level == power.CRITICAL else cfg["advertise_s"]
         now = time.ticks_ms()
-        window_s = cfg["advertise_s"] if timer_wake else cfg["awake_s"]
         deadline = time.ticks_add(now, window_s * 1000) if window_s else None   # None: no limit
         was_connected = False
         next_measure = now
@@ -203,26 +245,52 @@ class App:
                 period = _CONNECTED_MEASURE_MS if connected else cfg["awake_measure_s"] * 1000
                 next_measure = time.ticks_add(now, period)
             self.ble.poll()
+            self.show_battery(now)
             if self.reboot_at is not None and time.ticks_diff(now, self.reboot_at) >= 0:
                 self.ble.stop()
                 machine.reset()
+            if self.end_session:
+                break
             if connected:
                 was_connected, deadline = True, None
             elif was_connected:   # the phone left: sleep soon
                 was_connected, deadline = False, time.ticks_add(now, _DISCONNECT_GRACE_MS)
-            if cfg["interval_s"] and deadline is not None and time.ticks_diff(now, deadline) >= 0:
-                break   # interval 0 = never sleep (can change from the app)
-            time.sleep_ms(50)
+            never = power.interval_s(self.level, cfg["interval_s"]) == 0   # can change from the app
+            if not never and deadline is not None and time.ticks_diff(now, deadline) >= 0:
+                break
+            time.sleep_ms(20)
         self.sleep()
+
+    # --- LED ------------------------------------------------------------------------
+
+    def show_battery(self, now):
+        """A short flash every power.blink_ms(level): faster as the battery runs
+        down, off while it's fine. Identify (from the app) has the LED meanwhile."""
+        period = power.blink_ms(self.level)
+        if self.led is None or not period or (self.ble and self.ble.identify_until is not None):
+            return
+        self.led.value(1 if time.ticks_diff(now, self.started) % period < _FLASH_MS else 0)
+
+    def blink_for(self, ms):
+        end = time.ticks_add(time.ticks_ms(), ms)
+        while time.ticks_diff(end, time.ticks_ms()) > 0:
+            self.show_battery(time.ticks_ms())
+            time.sleep_ms(10)
 
     def sleep(self):
         cfg = self.cfg
-        self.ble.stop()
+        if self.ble:
+            self.ble.stop()
+        if self.led:
+            self.led.off()
         button = cfg["pins"]["button"]
         if button is not None:
             esp32.wake_on_ext0(pin=Pin(button, Pin.IN), level=esp32.WAKEUP_ALL_LOW)
-        print("Deep sleep for %d s" % cfg["interval_s"])
-        machine.deepsleep(cfg["interval_s"] * 1000)
+        # Never 0 here: deepsleep(0) would sleep with no timer at all.
+        seconds = power.interval_s(self.level, cfg["interval_s"]) or 60
+        print("Deep sleep for %d s" % seconds)
+        machine.deepsleep(seconds * 1000)
+
 
 def run():
     App().run()

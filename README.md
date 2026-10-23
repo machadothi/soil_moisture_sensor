@@ -29,10 +29,12 @@ app connects (up to 5 minutes), and sleeps again when the app disconnects.
 - **Easy to work with over USB.** After power-on, the reset (EN) button or a
   deploy, it also stays awake for up to 5 minutes and measures every 5 s, so
   you can watch the log, calibrate and reach the REPL.
-- **Battery level,** only with a battery divider. The board has none out of the
-  box; two resistors and a capacitor on GPIO34 add one (see
-  [docs/hardware.md](docs/hardware.md#battery-sensing)). Without it, readings
-  from the unconnected pin are dropped rather than sent.
+- **Battery level and protection** (with the battery divider on GPIO34):
+  the emptier the battery, the less often the board wakes; near empty the
+  radio goes off to protect the cell, and the LED flashes faster as the charge
+  drops. Home Assistant gets battery low, heat and problem alerts. See
+  [docs/battery.md](docs/battery.md); the divider is in
+  [docs/hardware.md](docs/hardware.md#battery-sensing).
 
 ## Quick start
 
@@ -70,6 +72,9 @@ new board, see [docs/hardware.md](docs/hardware.md#flashing-micropython).
 | `0x03` humidity | Humidity | 0.01 % (the DHT11 gives whole percent) |
 | `0x01` battery | Battery | 1 %, only with a battery divider |
 | `0x0C` voltage | Voltage | 0.001 V, battery voltage, only with a battery divider |
+| `0x15` battery | Battery (low) | on from the "low" battery level down ([docs/battery.md](docs/battery.md)) |
+| `0x1D` heat | Heat | on at 45 °C or more next to the cell |
+| `0x26` problem | Problem | on above 4.30 V (charger suspect) |
 
 The device is named after the scan-response name, `Soil-XXXX` (the last 4 hex
 digits of the Bluetooth address).
@@ -114,7 +119,7 @@ per-board calibration, so it is git-ignored.
 | `pins.soil` | 32 | probe output (ADC) |
 | `pins.dht11` | 22 | DHT11 data |
 | `pins.battery` | 34 | battery divider (ADC); `null` = none |
-| `pins.led` | `null` | an LED for the app's identify command |
+| `pins.led` | `null` | an LED: battery warnings and the app's identify command |
 | `pins.button` | 0 | wakes the board from deep sleep (GPIO0 = BOOT); `null` = none |
 | `soil.dry_mv`, `soil.wet_mv` | 2830, 1300 | calibration, see above |
 | `battery.divider` | 2.0 | battery voltage / pin voltage |
@@ -137,6 +142,7 @@ firmware/                  everything that runs on the board (MicroPython)
   protocol.py              BLE Sensor protocol values (pure Python)
   bthome.py                BTHome v2 packets        (pure Python)
   convert.py               moisture %, battery %    (pure Python)
+  power.py                 battery protection levels (pure Python)
   config.example.json      settings template; your config.json is git-ignored
 tools/
   deploy.sh                compile to .mpy, upload, restart
@@ -144,6 +150,7 @@ tools/
 tests/                     pytest for the pure-Python modules
 docs/hardware.md           the board: pins, what was checked, flashing
 docs/bluetooth.md          the app protocol, pairing and security
+docs/battery.md            battery protection and safety
 ```
 
 ## Tests

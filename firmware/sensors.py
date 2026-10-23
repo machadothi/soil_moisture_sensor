@@ -57,19 +57,23 @@ class Sensors:
     def soil_mv(self):
         return _millivolts(self.soil)
 
+    def battery_v(self):
+        """Battery volts, or None without a divider or with an implausible reading."""
+        if self.battery is None:
+            return None
+        battery = self.cfg["battery"]
+        volts = _millivolts(self.battery) * battery["divider"] / 1000
+        # A pin with nothing on it reads a few hundred mV: no battery
+        # reading rather than a wrong one.
+        return volts if battery["min_v"] <= volts <= battery["max_v"] else None
+
     def read(self):
         r = Readings()
         r.soil_mv = self.soil_mv()
         r.recalculate(self.cfg["soil"])
         r.temperature, r.humidity = self._dht()
-        if self.battery is not None:
-            battery = self.cfg["battery"]
-            volts = _millivolts(self.battery) * battery["divider"] / 1000
-            # A pin with nothing on it reads a few hundred mV: no battery
-            # reading rather than a wrong one.
-            if battery["min_v"] <= volts <= battery["max_v"]:
-                r.battery_v = volts
-                r.battery = convert.battery_percent(volts)
+        r.battery_v = self.battery_v()
+        r.battery = convert.battery_percent(r.battery_v)
         return r
 
     def _dht(self):

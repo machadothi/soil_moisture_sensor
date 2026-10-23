@@ -20,10 +20,16 @@ def test_battery_and_voltage():
     assert data[3:] == bytes((0x01, 80, 0x0C)) + struct.pack("<H", 3912)
 
 
+def test_binary_flags():
+    data = bthome.service_data({bthome.BATTERY_LOW: True, bthome.HEAT: False, bthome.PROBLEM: None})
+    assert data[3:] == bytes((0x15, 1, 0x1D, 0))
+
+
 def test_advertisement_fits():
     # Every value present must still fit a legacy 31-byte advertising packet.
     adv = bthome.advertisement({bthome.PACKET_ID: 255, bthome.BATTERY: 100, bthome.TEMPERATURE: 25.0,
-                                bthome.HUMIDITY: 60, bthome.VOLTAGE: 4.2, bthome.MOISTURE: 100})
+                                bthome.HUMIDITY: 60, bthome.VOLTAGE: 4.2, bthome.MOISTURE: 100,
+                                bthome.BATTERY_LOW: 0, bthome.HEAT: 0, bthome.PROBLEM: 0})
     assert adv[:3] == b"\x02\x01\x06"
     assert adv[3] == len(adv) - 4 and adv[4] == 0x16
     assert len(adv) <= 31
