@@ -1,13 +1,15 @@
 # Configuration and the main cycle: measure, broadcast, deep-sleep.
 #
-# Two modes, chosen by how the board started:
-#   after power-on, the reset (EN) button or a deploy: awake for "awake_s"
-#     seconds, measuring every "awake_measure_s": time to connect the phone
-#     app, watch the log, or reach the REPL (Ctrl+C);
-#   after a deep-sleep wake: measure once, advertise for "advertise_s",
-#     sleep "interval_s" again. This is the battery mode.
-# While a phone is connected the board stays awake, measures every 2 s, and
-# sleeps _LINGER_MS after it disconnects. "interval_s": 0 never sleeps (USB power).
+# Two modes, chosen by how the board woke up:
+#   timer (every "interval_s"): measure once, broadcast BTHome for
+#     "advertise_s", sleep again. The app packet is left out: battery mode.
+#   the BOOT button, the reset (EN) button, power-on or a deploy: advertise for
+#     the app too and wait up to "awake_s" for a phone to connect (0 = until one
+#     does), measuring every "awake_measure_s". Also the time to watch the log or
+#     reach the REPL (Ctrl+C).
+# While a phone is connected the board stays awake and measures every 2 s;
+# _DISCONNECT_GRACE_MS after it disconnects it sleeps again. "interval_s": 0
+# never sleeps (USB power).
 #
 # Settings changed from the app (name, calibration, interval) go to
 # settings.json, on top of config.json; a factory reset deletes it.
@@ -29,10 +31,13 @@ from ble import BONDS_FILE, Ble
 
 SETTINGS_FILE = "settings.json"
 _CONNECTED_MEASURE_MS = 2000
-_LINGER_MS = 30000
+# Short, so the app can reconnect (e.g. Android re-connecting after pairing).
+_DISCONNECT_GRACE_MS = 5000
+_EXT0_WAKE = getattr(machine, "EXT0_WAKE", 2)
 
 DEFAULTS = {
-    "pins": {"soil": 32, "dht11": 22, "battery": 34, "led": None},
+    # button: wakes the board from deep sleep (GPIO0 is the BOOT button).
+    "pins": {"soil": 32, "dht11": 22, "battery": 34, "led": None, "button": 0},
     # Probe output in air and in water (mV). Measure yours: README.md, "Calibration".
     "soil": {"dry_mv": 2830, "wet_mv": 1300},
     # Battery through a divider, if the board has one. Readings outside
@@ -40,9 +45,9 @@ DEFAULTS = {
     "battery": {"divider": 2.0, "min_v": 2.8, "max_v": 4.5},
     # passkey: "" = made on the first start and kept in ble_passkey.
     "bluetooth": {"name": "", "passkey": ""},
-    "interval_s": 300,
-    "advertise_s": 4,
-    "awake_s": 120,
+    "interval_s": 60,
+    "advertise_s": 3,
+    "awake_s": 300,
     "awake_measure_s": 5,
 }
 
@@ -95,6 +100,8 @@ class App:
         self.readings = sensors.Readings()
         self.packet_id = 0
         self.reboot_at = None
+        self.timer_wake = (machine.reset_cause() == machine.DEEPSLEEP_RESET
+                           and machine.wake_reason() != _EXT0_WAKE)
         self.ble = Ble(self)
 
     # --- readings -------------------------------------------------------------------
@@ -174,15 +181,19 @@ class App:
 
     def run(self):
         cfg = self.cfg
-        woke = machine.reset_cause() == machine.DEEPSLEEP_RESET
-        if not woke:
+        timer_wake = self.timer_wake
+        self.ble.app_visible = not timer_wake
+        if not timer_wake:
             print("Soil sensor: %s (%s), BLE Sensor app and BTHome" % (self.ble.name, self.ble.address))
             print("Bluetooth: pairing code %06d" % self.ble.passkey)
             if cfg["interval_s"]:
-                print("Awake for %d s, then measuring every %d s in deep sleep. Ctrl+C for the REPL."
-                      % (cfg["awake_s"], cfg["interval_s"]))
+                print("Waiting %s for the app, then measuring every %d s in deep sleep. "
+                      "BOOT wakes it. Ctrl+C for the REPL."
+                      % ("%d s" % cfg["awake_s"] if cfg["awake_s"] else "until it connects", cfg["interval_s"]))
         now = time.ticks_ms()
-        deadline = time.ticks_add(now, (cfg["advertise_s"] if woke else cfg["awake_s"]) * 1000)
+        window_s = cfg["advertise_s"] if timer_wake else cfg["awake_s"]
+        deadline = time.ticks_add(now, window_s * 1000) if window_s else None   # None: no limit
+        was_connected = False
         next_measure = now
         while True:
             now = time.ticks_ms()
@@ -196,14 +207,22 @@ class App:
                 self.ble.stop()
                 machine.reset()
             if connected:
-                deadline = time.ticks_add(now, _LINGER_MS)
-            elif cfg["interval_s"] and time.ticks_diff(now, deadline) >= 0:   # 0 = never sleep (can change from the app)
-                break
+                was_connected, deadline = True, None
+            elif was_connected:   # the phone left: sleep soon
+                was_connected, deadline = False, time.ticks_add(now, _DISCONNECT_GRACE_MS)
+            if cfg["interval_s"] and deadline is not None and time.ticks_diff(now, deadline) >= 0:
+                break   # interval 0 = never sleep (can change from the app)
             time.sleep_ms(50)
+        self.sleep()
+
+    def sleep(self):
+        cfg = self.cfg
         self.ble.stop()
+        button = cfg["pins"]["button"]
+        if button is not None:
+            esp32.wake_on_ext0(pin=Pin(button, Pin.IN), level=esp32.WAKEUP_ALL_LOW)
         print("Deep sleep for %d s" % cfg["interval_s"])
         machine.deepsleep(cfg["interval_s"] * 1000)
-
 
 def run():
     App().run()

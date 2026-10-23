@@ -1,10 +1,10 @@
 {
-    "pins": {"soil": 32, "dht11": 22, "battery": 34, "led": null},
+    "pins": {"soil": 32, "dht11": 22, "battery": 34, "led": null, "button": 0},
     "soil": {"dry_mv": 2830, "wet_mv": 1300},
     "battery": {"divider": 2.0, "min_v": 2.8, "max_v": 4.5},
     "bluetooth": {"name": "", "passkey": ""},
-    "interval_s": 300,
-    "advertise_s": 4,
-    "awake_s": 120,
+    "interval_s": 60,
+    "advertise_s": 3,
+    "awake_s": 300,
     "awake_measure_s": 5
 }

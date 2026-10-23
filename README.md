@@ -7,8 +7,10 @@ air temperature and air humidity, and sends them over **Bluetooth LE**:
 - to the **BLE Sensor phone app** (`~/git/BLE_Sensor`), which finds it as
   "ESP32 Soil", shows the readings and calibrates the probe.
 
-On battery it spends most of its time in deep sleep: it wakes every 5 minutes,
-measures, broadcasts for 4 seconds and sleeps again.
+On battery it spends most of its time in deep sleep: it wakes every minute,
+measures, broadcasts to Home Assistant for 3 seconds and sleeps again. Press
+its **BOOT** button to connect the phone app: it then stays awake until the
+app connects (up to 5 minutes), and sleeps again when the app disconnects.
 
 ## Features
 
@@ -22,9 +24,11 @@ measures, broadcasts for 4 seconds and sleeps again.
 - **BTHome v2 broadcasts,** not encrypted. Every measurement has a new packet
   id, which survives deep sleep, so Home Assistant never drops a reading as a
   repeat.
-- **Easy to work with over USB.** After power-on, the reset button or a
-  deploy, it stays awake for 2 minutes and measures every 5 s, so you can
-  watch the log, calibrate and reach the REPL.
+- **Wakes on the BOOT button** for the app. The timed wakes send only the
+  BTHome packet, to save battery.
+- **Easy to work with over USB.** After power-on, the reset (EN) button or a
+  deploy, it also stays awake for up to 5 minutes and measures every 5 s, so
+  you can watch the log, calibrate and reach the REPL.
 - **Battery level,** if the board has a battery divider. On the board tested
   so far it doesn't (see [docs/hardware.md](docs/hardware.md)). Readings from
   an unconnected pin are dropped rather than sent.
@@ -43,7 +47,7 @@ The log shows one line per measurement:
 ```
 Soil sensor: Soil-7D82 (B0:B2:1C:44:7D:82), BLE Sensor app and BTHome
 Bluetooth: pairing code 123456
-Awake for 120 s, then measuring every 300 s in deep sleep. Ctrl+C for the REPL.
+Waiting 300 s for the app, then measuring every 60 s in deep sleep. BOOT wakes it. Ctrl+C for the REPL.
 soil 2302 mV (34.5 %)  23 C  60 %RH  battery - (-)
 ```
 
@@ -74,10 +78,11 @@ packet, so Home Assistant keeps the last value.
 
 ## Phone app
 
-Press the board's **EN** button, then open the BLE Sensor app within 2 minutes:
-the radar shows **ESP32 Soil**. On the first connection Android asks for the
-pairing code. The code is on the USB log at start-up (put it on a label on the
-board). See [docs/bluetooth.md](docs/bluetooth.md) for the protocol and the
+Press the board's **BOOT** button, then open the BLE Sensor app within 5
+minutes: the radar shows **ESP32 Soil**. The board stays awake while the app is
+connected, and goes back to sleep 5 s after it disconnects. On the first
+connection Android asks for the pairing code. The code is on the USB log at
+start-up (put it on a label on the board). See [docs/bluetooth.md](docs/bluetooth.md) for the protocol and the
 security.
 
 ## Calibration
@@ -109,14 +114,15 @@ per-board calibration, so it is git-ignored.
 | `pins.dht11` | 22 | DHT11 data |
 | `pins.battery` | 34 | battery divider (ADC); `null` = none |
 | `pins.led` | `null` | an LED for the app's identify command |
+| `pins.button` | 0 | wakes the board from deep sleep (GPIO0 = BOOT); `null` = none |
 | `soil.dry_mv`, `soil.wet_mv` | 2830, 1300 | calibration, see above |
 | `battery.divider` | 2.0 | battery voltage / pin voltage |
 | `battery.min_v`, `battery.max_v` | 2.8, 4.5 | readings outside are dropped |
 | `bluetooth.name` | `""` | `""` = `Soil-XXXX`; a name set from the app wins |
 | `bluetooth.passkey` | `""` | fixed 6-digit pairing code; `""` = made on the first start, kept in `ble_passkey` |
-| `interval_s` | 300 | deep sleep between measurements; `0` = never sleep (USB power) |
-| `advertise_s` | 4 | how long each measurement is broadcast |
-| `awake_s` | 120 | awake time after power-on, reset or deploy (a connected phone keeps it awake) |
+| `interval_s` | 60 | deep sleep between measurements; `0` = never sleep (USB power) |
+| `advertise_s` | 3 | how long each timed measurement is broadcast (BTHome only) |
+| `awake_s` | 300 | after the button, power-on, reset or deploy: how long to wait for the app; `0` = until it connects |
 | `awake_measure_s` | 5 | measurement interval while awake |
 
 ## Repository layout
@@ -154,4 +160,4 @@ which Soil writes are accepted) and the moisture and battery conversions.
 
 While the board deep-sleeps, it can't hear `mpremote`. `tools/deploy.sh`
 resets it first through the USB-serial chip (RTS is wired to EN), and it then
-stays awake for `awake_s`. Without USB, press the board's **EN** button.
+stays awake for `awake_s`. Without USB, press the board's **BOOT** button.

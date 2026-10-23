@@ -9,6 +9,8 @@
 #   BTHome packet: flags | service data 0xFCD2 (bthome.py)
 # The scan response carries the name. While a phone is connected, only the
 # BTHome packet goes out (not connectable), so Home Assistant keeps getting data.
+# On the timed wakes the app packet is left out too (app_visible = False): the
+# app finds the board only after a button press, a reset or a deploy.
 #
 # Security, as on the ESP32 Air board: readings are public (BTHome broadcasts
 # them anyway), but every write (name, calibration, commands) needs a paired
@@ -108,8 +110,9 @@ class Ble:
         self.ble.gatts_set_buffer(self.h_soil, protocol.SOIL_SIZE)
         self.connection = None
         self.pending = []          # writes from the IRQ, handled in poll()
-        self.show_bthome = False
+        self.app_visible = True    # alternate with the app packet; False: BTHome only
         self.bthome_values = {}
+        self._adv_index = 0
         self.identify_until = None
         self._next_adv = time.ticks_ms()
         self.ble.irq(self._irq)
@@ -164,8 +167,11 @@ class Ble:
 
     def _advertise(self):
         connected = self.connection is not None
-        self.show_bthome = connected or not self.show_bthome
-        packet = bthome.advertisement(self.bthome_values) if self.show_bthome else protocol.app_advertisement()
+        packets = [bthome.advertisement(self.bthome_values)]
+        if self.app_visible and not connected:
+            packets.append(protocol.app_advertisement())
+        self._adv_index = (self._adv_index + 1) % len(packets)
+        packet = packets[self._adv_index]
         try:
             self.ble.gap_advertise(_ADV_INTERVAL_US, adv_data=packet,
                                    resp_data=bthome.ad(0x09, self.name.encode()), connectable=not connected)

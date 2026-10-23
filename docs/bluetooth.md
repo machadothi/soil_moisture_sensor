@@ -21,13 +21,15 @@ The code is `firmware/ble.py` (radio, pairing) and `firmware/protocol.py`
 
 The board deep-sleeps between measurements, and asleep it's off the air:
 
-| When | For how long | App |
+| When | For how long | Sends |
 |---|---|---|
-| After power-on, the **EN** button, or a deploy | `awake_s` (120 s) | connect now |
-| Each measurement (every `interval_s`, 300 s) | `advertise_s` (4 s) | possible, but hard to catch |
-| While a phone is connected | until it disconnects, plus 30 s | stays connected |
+| Each measurement (every `interval_s`, 60 s) | `advertise_s` (3 s) | BTHome only: the app doesn't see it |
+| After the **BOOT** button, power-on, the EN button or a deploy | until a phone connects, at most `awake_s` (300 s) | BTHome and the app packet |
+| While a phone is connected | until it disconnects, plus 5 s | BTHome (not connectable) |
 
-So to use the app: press **EN**, then connect within 2 minutes.
+So to use the app: press **BOOT**, then connect within 5 minutes. BOOT (GPIO0)
+wakes the board from deep sleep (`esp32.wake_on_ext0`); EN resets it, which
+works too.
 
 ## What it sends
 
@@ -117,7 +119,7 @@ To read the code:
 
 ## Trying it
 
-- **BLE Sensor app:** press EN on the board; the radar shows "ESP32 Soil".
+- **BLE Sensor app:** press BOOT on the board; the radar shows "ESP32 Soil".
   - **Live:** soil moisture, temperature, humidity, the probe, the board.
   - **Charts:** includes soil moisture.
   - **Control:** reboot, factory reset.
@@ -135,5 +137,5 @@ To read the code:
 - **Rejected writes aren't refused over the air.** MicroPython can't answer a
   write with an ATT error; the old value is written back instead.
 - **One phone at a time.**
-- **Hard to catch asleep:** between measurements the board is off the air. Press
-  EN to connect.
+- **Off the air while asleep,** and invisible to the app on the timed wakes.
+  Press BOOT to connect.
