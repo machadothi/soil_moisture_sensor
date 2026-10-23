@@ -8,6 +8,7 @@ Home Assistant will receive.
 import asyncio
 import struct
 import sys
+import time
 
 from bleak import BleakScanner
 
@@ -52,7 +53,8 @@ async def main(wanted, seconds):
         if last.get(device.address) == data:
             return   # the same packet again
         last[device.address] = data
-        print("%s %-12s %4d dBm  %s" % (device.address, name, adv.rssi, decode(data)), flush=True)
+        print("%s %s %-12s %4d dBm  %s" % (time.strftime("%H:%M:%S"), device.address, name, adv.rssi, decode(data)),
+              flush=True)
 
     async with BleakScanner(seen, scanning_mode="active"):
         await asyncio.sleep(seconds)
