@@ -8,8 +8,9 @@ def test_app_advertisement_is_what_the_app_scans_for():
     assert len(adv) <= 31
     # 128-bit service UUID, little-endian on air
     assert bytes((17, 0x07)) + bytes(reversed(bytes.fromhex("a7e400005c2b4f1a9d3e6b8c0f2e1d47"))) in adv
-    # manufacturer data: company 0x02FF, board id 0x0D, protocol version 1
-    assert adv.endswith(bytes((5, 0xFF, 0xFF, 0x02, 0x0D, 0x01)))
+    # manufacturer data: company 0x02FF, board id 0x0D, protocol version 1, flags
+    assert adv.endswith(bytes((6, 0xFF, 0xFF, 0x02, 0x0D, 0x01, 0x00)))
+    assert protocol.app_advertisement(protocol.ADV_PAIRING_OPEN).endswith(bytes((0x0D, 0x01, 0x01)))
 
 
 def test_info():

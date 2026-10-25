@@ -54,8 +54,7 @@ DEFAULTS = {
     # Battery through a divider, if the board has one. Readings outside
     # min_v-max_v are dropped (an unconnected pin reads ~0.2 V).
     "battery": {"divider": 2.0, "min_v": 2.8, "max_v": 4.5},
-    # passkey: "" = made on the first start and kept in ble_passkey.
-    "bluetooth": {"name": "", "passkey": ""},
+    "bluetooth": {"name": ""},
     "interval_s": 60,
     "advertise_s": 3,
     "awake_s": 300,
@@ -213,8 +212,8 @@ class App:
 
     def factory_reset(self):
         """Forget settings.json (back to config.json) and the paired phones, and restart.
-        The passkey stays: it's on the board's label."""
-        for name in (SETTINGS_FILE, BONDS_FILE):
+        ble_passkey is from older firmware (pairing had a code then)."""
+        for name in (SETTINGS_FILE, BONDS_FILE, "ble_passkey"):
             try:
                 os.remove(name)
             except OSError:
@@ -238,7 +237,6 @@ class App:
         self.ble.app_visible = app_s is not None
         if app_s is not None:
             print("Soil sensor: %s (%s), BLE Sensor app and BTHome" % (self.ble.name, self.ble.address))
-            print("Bluetooth: pairing code %06d" % self.ble.passkey)
             print("Waiting %s for the app, then measuring every %d s in deep sleep. BOOT wakes it. "
                   "Ctrl+C for the REPL." % ("%d s" % app_s if app_s else "until it connects",
                                             power.interval_s(self.level, cfg["interval_s"])))
@@ -253,7 +251,9 @@ class App:
         next_measure = now
         while True:
             now = time.ticks_ms()
-            connected = self.ble.connection is not None
+            # Only a paired phone keeps the board awake (and its leaving starts
+            # the grace); a stranger is dropped by ble.py and changes nothing.
+            connected = self.ble.connection is not None and self.ble.trusted
             if time.ticks_diff(now, next_measure) >= 0:
                 self.measure()
                 period = _CONNECTED_MEASURE_MS if connected else cfg["awake_measure_s"] * 1000
@@ -269,6 +269,12 @@ class App:
                 was_connected, deadline = True, None
             elif was_connected:   # the phone left: sleep soon
                 was_connected, deadline = False, time.ticks_add(now, _DISCONNECT_GRACE_MS)
+            if self.ble.pairing_open() and self.ble.app_visible and deadline is not None \
+                    and time.ticks_diff(self.ble.pairing_until, deadline) > 0:
+                deadline = self.ble.pairing_until   # "add a phone": stay findable while the window is open
+            if self.ble.checking():   # a phone is proving its bond (e.g. on a 3 s timed wake): wait for it
+                time.sleep_ms(20)
+                continue
             never = power.interval_s(self.level, cfg["interval_s"]) == 0   # can change from the app
             if not never and deadline is not None and time.ticks_diff(now, deadline) >= 0:
                 break

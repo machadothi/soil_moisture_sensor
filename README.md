@@ -48,8 +48,8 @@ tools/deploy.sh                                  # compile, upload, restart
 The log shows one line per measurement:
 
 ```
+Bluetooth: pairing window open for 120 s (after start-up)
 Soil sensor: Soil-7D82 (B0:B2:1C:44:7D:82), BLE Sensor app and BTHome
-Bluetooth: pairing code 123456
 Waiting 300 s for the app, then measuring every 60 s in deep sleep. BOOT wakes it. Ctrl+C for the REPL.
 soil 2302 mV (34.5 %)  23 C  60 %RH  battery - (-)
 ```
@@ -86,10 +86,14 @@ packet, so Home Assistant keeps the last value.
 
 Press the board's **BOOT** button, then open the BLE Sensor app within 5
 minutes: the radar shows **ESP32 Soil**. The board stays awake while the app is
-connected, and goes back to sleep 5 s after it disconnects. On the first
-connection Android asks for the pairing code. The code is on the USB log at
-start-up (put it on a label on the board). See [docs/bluetooth.md](docs/bluetooth.md) for the protocol and the
-security.
+connected, and goes back to sleep 5 s after it disconnects.
+
+**Pairing** needs no code, but only works in the first 2 minutes after you
+press BOOT (or reset, or power it on), 10 minutes while no phone is paired
+yet. Tap the board when the app shows **Ready to pair**, and accept Android's
+prompt. After that the phone is listed under *Your boards* and connects any
+time, even when the board only wakes on its timer. See
+[docs/bluetooth.md](docs/bluetooth.md) for the protocol and the security.
 
 ## Calibration
 
@@ -126,7 +130,6 @@ per-board calibration, so it is git-ignored.
 | `battery.divider` | 2.0 | battery voltage / pin voltage |
 | `battery.min_v`, `battery.max_v` | 2.8, 4.5 | readings outside are dropped |
 | `bluetooth.name` | `""` | `""` = `Soil-XXXX`; a name set from the app wins |
-| `bluetooth.passkey` | `""` | fixed 6-digit pairing code; `""` = made on the first start, kept in `ble_passkey` |
 | `interval_s` | 60 | deep sleep between measurements; `0` = never sleep (USB power) |
 | `advertise_s` | 3 | how long each timed measurement is broadcast (BTHome only) |
 | `awake_s` | 300 | after the button, power-on, reset or deploy: how long to wait for the app; `0` = until it connects |
