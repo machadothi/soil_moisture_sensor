@@ -93,30 +93,34 @@ Changes go to `settings.json`.
 
 ## Pairing and security
 
-The same rules as the ESP32 Air board (air_quality_sensor `docs/bluetooth.md`):
-- **Readings are public.** Env, Info, System and Soil can be read without
-  pairing; BTHome broadcasts the readings anyway.
-- **Every write needs a paired phone:** Command, Name and Soil are registered
-  with `_FLAG_WRITE_AUTHENTICATED`. NimBLE refuses an unpaired write with
-  "insufficient authentication", and the phone then pairs.
-- **The pairing:** LE Secure Connections with a **passkey** (MITM protection).
-  The BLE Sensor app pairs right after connecting, and Android asks for the
-  code.
-- **The code is fixed,** because this board has no display to show a new one:
-  - `bluetooth.passkey` in `config.json`, if set (6 digits);
-  - otherwise made with `os.urandom` on the first start and kept in
-    `ble_passkey` on the board. A factory reset keeps it.
-  - It's printed on the USB log at every start (`Bluetooth: pairing code …`).
-    USB access is full access anyway. **Put it on a label on the board.**
-- **Paired phones are remembered** in `ble_bonds.json`, so you pair once per
-  phone. A factory reset forgets them all (and restarts the board); then
-  remove the board from the phone's Bluetooth settings before pairing again.
+The same rules as the ESP32 Air board (air_quality_sensor
+`docs/bluetooth.md#pairing-and-security`):
+- **Readings are public:** Env, Info, System and Soil can be read without
+  pairing, and BTHome broadcasts the readings anyway, for Home Assistant.
+- **Only bonded phones stay connected, and only they can write.** Command,
+  Name and Soil writes need the encrypted link of a bonded phone
+  (`_FLAG_WRITE_ENCRYPTED`, plus a bond check in `ble.py`).
+- **Pairing needs no code** ("Just Works", LE Secure Connections): Android
+  just asks "Pair with Soil-…?". **But only while the pairing window is open:**
+  - **after a start you caused** (BOOT, reset, power-on, a deploy): for 2
+    minutes, or 10 minutes while no phone is bonded yet. The timed wakes
+    every minute never open it;
+  - **from a bonded phone:** Command `0x06` ("Add a phone" in the app) opens
+    it for 2 minutes, and the board stays awake and findable meanwhile.
 
-To read the code:
-
-```sh
-.venv/bin/mpremote connect /dev/ttyUSB0 exec "print(open('ble_passkey').read())"
-```
+  While it's open, the app packet's flags byte has bit 0 set, and the app
+  shows **Ready to pair**.
+- **Bonded phones connect any time:** after BOOT, and also on the 3-second
+  timed wakes. The board stays awake while it checks a phone's bond, and the
+  app (*Your boards*) connects to the board's address without scanning.
+- **Strangers are dropped.** Every phone that connects is asked to encrypt
+  with its bond; one that can't is disconnected after 6 s (a minute in the
+  window). A new bond outside the window is refused, and so is re-pairing a
+  known address (someone copying a bonded phone's address) without losing
+  the real bond. A stranger's connection doesn't change when the board
+  sleeps.
+- **Paired phones are remembered** in `ble_bonds.json`. A factory reset
+  forgets them all (and restarts the board, so the first-setup window opens).
 
 ## Trying it
 

@@ -20,6 +20,7 @@ SENSOR_SOIL = 1 << 7
 COMMAND_FACTORY_RESET = 0x02
 COMMAND_REBOOT = 0x03
 COMMAND_IDENTIFY = 0x04
+COMMAND_OPEN_PAIRING = 0x06   # from a paired phone: let another phone pair (0x05 is the Thunderboard's)
 
 NAME_MAX = 20
 SOIL_SIZE = 20
@@ -44,10 +45,14 @@ def uuid_bytes(text):
     return bytes(reversed(binascii.unhexlify(text.replace("-", ""))))
 
 
-def app_advertisement():
-    """Flags, the service UUID and manufacturer data: what the app scans for."""
+ADV_PAIRING_OPEN = 1 << 0   # app packet flags: the pairing window is open
+
+
+def app_advertisement(flags=0):
+    """Flags, the service UUID and manufacturer data (company, board id,
+    protocol version, flags: bit 0 = pairing window open): what the app scans for."""
     return (ad(0x01, b"\x06") + ad(0x07, uuid_bytes(SERVICE_UUID))
-            + ad(0xFF, struct.pack("<HBB", COMPANY_ID, BOARD_ID, VERSION)))
+            + ad(0xFF, struct.pack("<HBBB", COMPANY_ID, BOARD_ID, VERSION, flags)))
 
 
 def info():
